@@ -1,3 +1,5 @@
+// renderer.js (전체 코드)
+
 document.addEventListener('DOMContentLoaded', () => {
     // --- Element 선택 ---
     const albumList = document.getElementById('album-list');
@@ -23,6 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentItems = [];
     let selectedAlbumId = 1; // '모든 항목'이 기본값
     let selectedItemIds = new Set();
+    let activePromptEditor = null; // 현재 열려있는 팝오버 에디터 참조
 
     // --- 함수 정의 ---
 
@@ -210,6 +213,16 @@ document.addEventListener('DOMContentLoaded', () => {
         previewSection.className = 'preview-section';
         const previewText = document.createElement('span');
         previewText.className = 'prompt-preview-text';
+        
+        previewText.title = '클릭하여 프롬프트 수정'; // 마우스 호버 시 툴팁 추가
+        previewText.addEventListener('click', (e) => {
+            // 그리드 뷰 상태일 때만 에디터 팝업을 엽니다.
+            if (promptList.classList.contains('grid-view')) {
+                e.stopPropagation(); // 이벤트 버블링을 중단하여 아이템 선택을 방지합니다.
+                openGridPromptEditor(item, previewText);
+            }
+        });
+
         const previewCopyBtn = createCopyButton(promptDetailInput);
         previewSection.append(previewText, previewCopyBtn);
 
@@ -262,6 +275,116 @@ document.addEventListener('DOMContentLoaded', () => {
         return btn;
     };
 
+    /**
+     * 열려있는 팝오버 에디터가 있다면 닫습니다.
+     */
+    const closeActivePromptEditor = () => {
+        if (activePromptEditor) {
+            activePromptEditor.close();
+        }
+    };
+
+    /**
+     * 그리드 뷰에서 프롬프트를 수정하기 위한 작은 팝오버 창을 엽니다.
+     * @param {object} item - 수정할 아이템 객체
+     * @param {HTMLElement} targetElement - 팝오버가 표시될 기준 요소 (prompt-preview-text)
+     */
+    const openGridPromptEditor = (item, targetElement) => {
+        closeActivePromptEditor(); // 기존 에디터가 있으면 닫기
+
+        const popover = document.createElement('div');
+        popover.className = 'prompt-editor-popover';
+        
+        const textarea = document.createElement('textarea');
+        textarea.value = item.prompt || '';
+        
+        const buttonContainer = document.createElement('div');
+        buttonContainer.className = 'popover-buttons';
+        
+        const saveBtn = document.createElement('button');
+        saveBtn.textContent = '저장';
+        saveBtn.className = 'popover-btn primary';
+        
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = '취소';
+        cancelBtn.className = 'popover-btn';
+
+        buttonContainer.append(cancelBtn, saveBtn);
+        popover.append(textarea, buttonContainer);
+        document.body.appendChild(popover);
+
+        // --- ★★★ 수정된 위치 계산 로직 ★★★ ---
+        const rect = targetElement.getBoundingClientRect();
+        const popoverRect = popover.getBoundingClientRect(); // 팝오버의 크기를 가져옴
+        const popoverWidth = Math.max(rect.width, 250);
+
+        // 1. 수평 위치 계산
+        let finalLeft = rect.left;
+        if (rect.left + popoverWidth > window.innerWidth) {
+            finalLeft = window.innerWidth - popoverWidth - 10;
+        }
+
+        // 2. 수직 위치 계산
+        let finalTop = rect.bottom + 5; // 기본적으로 요소 아래에 표시
+        // 팝오버가 화면 하단을 넘어가는지 확인
+        if (finalTop + popoverRect.height > window.innerHeight) {
+            // 넘어간다면 요소의 위쪽에 표시
+            finalTop = rect.top - popoverRect.height - 5;
+        }
+        
+        popover.style.left = `${finalLeft}px`;
+        popover.style.top = `${finalTop}px`;
+        popover.style.width = `${popoverWidth}px`;
+        // --- ★★★ 여기까지 수정 ★★★
+
+        textarea.focus();
+        textarea.select();
+
+        // --- 이벤트 핸들러 ---
+        const close = () => {
+            popover.remove();
+            document.removeEventListener('click', handleOutsideClick, true);
+            activePromptEditor = null;
+        };
+
+        const save = async () => {
+            const newPrompt = textarea.value.trim();
+            if (newPrompt !== (item.prompt || '').trim()) {
+                const currentItem = currentItems.find(i => i.id === item.id);
+                if (currentItem) {
+                    currentItem.prompt = newPrompt;
+                    targetElement.textContent = newPrompt; // UI 즉시 업데이트
+                    await window.electronAPI.invoke('update-item-text', { id: item.id, title: currentItem.title, prompt: newPrompt });
+                    showToast('프롬프트를 수정했습니다.');
+                }
+            }
+            close();
+        };
+        
+        const handleKeyDown = (e) => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                save();
+            }
+        };
+
+        const handleOutsideClick = (e) => {
+            if (!popover.contains(e.target) && e.target !== targetElement) {
+                close();
+            }
+        };
+
+        saveBtn.addEventListener('click', save);
+        cancelBtn.addEventListener('click', close);
+        textarea.addEventListener('keydown', handleKeyDown);
+        
+        setTimeout(() => {
+            document.addEventListener('click', handleOutsideClick, true);
+        }, 0);
+        
+        activePromptEditor = { close };
+    };
+
     const setupDragAndDrop = (element, itemId) => {
         element.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); element.classList.add('dragover'); });
         element.addEventListener('dragleave', (e) => { e.preventDefault(); e.stopPropagation(); element.classList.remove('dragover'); });
@@ -271,6 +394,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const openLightbox = (imageUrl) => { lightboxImage.src = imageUrl; lightbox.style.display = 'flex'; };
     const applyShowHiddenState = () => { promptList.classList.toggle('hiding-enabled', !showHiddenToggle.checked); };
     const applyFiltersAndSort = () => {
+        closeActivePromptEditor(); // 필터링/정렬 시 에디터 닫기
         let itemsToRender = [...currentItems];
         const searchTerm = searchInput.value.toLowerCase().trim();
         if (searchTerm) {
@@ -300,10 +424,11 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const handleAddAlbum = async () => { const name = await showAlbumPrompt(); if (name && name.trim()) { currentAlbums = await window.electronAPI.invoke('add-album', name.trim()); renderAlbums(); showToast(`'${name.trim()}' 앨범이 추가되었습니다.`, 'success'); } };
     
-    // ★★★ 수정된 부분 ★★★
     const handleAlbumSelect = async (albumId) => {
         // 이미 선택된 앨범을 다시 클릭하면 아무것도 하지 않음
         if (selectedAlbumId === albumId) return;
+
+        closeActivePromptEditor(); // 앨범 변경 시 에디터 닫기
 
         selectedAlbumId = albumId;
         selectedItemIds.clear();
@@ -341,7 +466,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             switch (e.key) {
                 case 'Escape':
-                    if (!modalContainer.classList.contains('hidden')) {
+                    // 팝오버 에디터를 우선적으로 닫도록 순서 변경
+                    if (activePromptEditor) {
+                        closeActivePromptEditor();
+                    } else if (!modalContainer.classList.contains('hidden')) {
                         modalCancelBtn.click();
                     } else if (selectedItemIds.size > 0) {
                         selectedItemIds.clear();
