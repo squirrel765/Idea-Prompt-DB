@@ -153,25 +153,24 @@ input[type="text"], [contenteditable="true"] { user-select: auto; }
     box-sizing: border-box;
 }
 
-/* 4. (개선) 앱 테마와 어울리도록 스크롤바 스타일을 지정합니다. */
-.list-view .prompt-detail-input::-webkit-scrollbar {
+/* 4. (개선) 앱 테마와 어울리도록 전역 스크롤바 스타일을 지정합니다. */
+::-webkit-scrollbar {
     width: 8px; /* 스크롤바 너비 */
 }
 
-.list-view .prompt-detail-input::-webkit-scrollbar-track {
-    background: #282c34; /* 스크롤바 배경색 */
+::-webkit-scrollbar-track {
+    background: #282c34; /* 스크롤바 배경색 (메인 배경과 동일하게) */
     border-radius: 4px;
 }
 
-.list-view .prompt-detail-input::-webkit-scrollbar-thumb {
+::-webkit-scrollbar-thumb {
     background: #5c6370; /* 스크롤바 막대 색상 */
     border-radius: 4px;
 }
 
-.list-view .prompt-detail-input::-webkit-scrollbar-thumb:hover {
-    background: #61afef; /* 마우스 호버 시 색상 */
+::-webkit-scrollbar-thumb:hover {
+    background: #61afef; /* 마우스 호버 시 하이라이트 색상 */
 }
-
 
 /* 추가: 그리드 뷰 프롬프트 팝오버 에디터 스타일 */
 .prompt-editor-popover {
