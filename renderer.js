@@ -1,4 +1,4 @@
-// renderer.js (전체 최종 코드 - 자동 추가 기능 수정됨)
+// renderer.js (전체 최종 코드 - 순서 변경 및 버그 수정 완료)
 
 document.addEventListener('DOMContentLoaded', () => {
     // --- Element 선택 ---
@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- 상태 관리 변수 ---
     let currentAlbums = [];
     let currentItems = [];
-    let selectedAlbumId = 1; // '모든 항목'이 기본값
+    let selectedAlbumId = 1;
     let selectedItemIds = new Set();
     let activePromptEditor = null;
     let dragState = {};
@@ -73,6 +73,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 tree.push(album);
             }
         }
+        // 각 레벨의 자식들을 display_order에 따라 정렬
+        albumMap.forEach(album => {
+            album.children.sort((a, b) => a.display_order - b.display_order);
+        });
+        tree.sort((a, b) => a.display_order - b.display_order);
         return tree;
     };
 
@@ -81,26 +86,21 @@ document.addEventListener('DOMContentLoaded', () => {
         albumList.innerHTML = '';
         const allItemsAlbum = { id: 1, name: '모든 항목' };
         const favoritesAlbum = { id: 'favorites', name: '⭐ 즐겨찾기' };
-
-        [allItemsAlbum, favoritesAlbum].forEach(album => {
-            albumList.appendChild(createAlbumListItem(album));
-        });
-
+        [allItemsAlbum, favoritesAlbum].forEach(album => albumList.appendChild(createAlbumListItem(album)));
+        
         const renderNode = (albumNode, parentElement) => {
             const li = createAlbumListItem(albumNode);
             if (albumNode.children.length > 0) {
                 li.classList.add('has-children');
-                if (!expandedAlbumIds.has(albumNode.id)) {
-                    li.classList.add('collapsed');
-                }
+                if (!expandedAlbumIds.has(albumNode.id)) li.classList.add('collapsed');
                 
                 const childUl = document.createElement('ul');
-                albumNode.children.sort((a,b) => a.name.localeCompare(b.name)).forEach(child => renderNode(child, childUl));
+                albumNode.children.forEach(child => renderNode(child, childUl));
                 li.appendChild(childUl);
             }
             parentElement.appendChild(li);
         };
-        albumTree.sort((a,b) => a.name.localeCompare(b.name)).forEach(albumNode => renderNode(albumNode, albumList));
+        albumTree.forEach(albumNode => renderNode(albumNode, albumList));
     };
     
     const createAlbumListItem = (album) => {
@@ -110,9 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const content = document.createElement('div');
         content.className = 'album-content';
     
-        if (album.id == selectedAlbumId) {
-            li.classList.add('active');
-        }
+        if (album.id == selectedAlbumId) li.classList.add('active');
     
         content.addEventListener('click', (e) => {
             if (!e.target.classList.contains('toggle-children') && !e.target.matches('.album-name input')) {
@@ -132,37 +130,26 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
         
-        content.addEventListener('dragenter', (e) => e.preventDefault());
+        content.addEventListener('dragenter', e => e.preventDefault());
     
         content.addEventListener('dragover', (e) => {
             e.preventDefault();
             const isItemDrag = e.dataTransfer.types.includes('text/plain');
+            if (dragState.draggedId && (album.id == dragState.draggedId || li.querySelector(`li[data-id="${dragState.draggedId}"]`))) return;
             
-            if (dragState.draggedId && (album.id == dragState.draggedId || li.querySelector(`li[data-id="${dragState.draggedId}"]`))) {
-                return;
-            }
-    
             albumList.querySelectorAll('.drop-on, .drop-above, .drop-below').forEach(el => el.classList.remove('drop-on', 'drop-above', 'drop-below'));
-
             const rect = content.getBoundingClientRect();
             const verticalPos = (e.clientY - rect.top) / rect.height;
     
             dragState.targetLi = li;
             if (dragState.draggedId && isStandardAlbum) {
-                 if (verticalPos > 0.25 && verticalPos < 0.75) {
-                    dragState.mode = 'on';
-                } else if (verticalPos <= 0.25) {
-                    dragState.mode = 'above';
-                } else {
-                    dragState.mode = 'below';
-                }
+                 if (verticalPos > 0.25 && verticalPos < 0.75) dragState.mode = 'on';
+                 else if (verticalPos <= 0.25) dragState.mode = 'above';
+                 else dragState.mode = 'below';
             } else if (isItemDrag) {
                 dragState.mode = 'on';
             }
-            
-            if (dragState.targetLi && dragState.mode) {
-                dragState.targetLi.classList.add(`drop-${dragState.mode}`);
-            }
+            if (dragState.targetLi && dragState.mode) dragState.targetLi.classList.add(`drop-${dragState.mode}`);
         });
     
         content.addEventListener('dragend', () => {
@@ -192,24 +179,30 @@ document.addEventListener('DOMContentLoaded', () => {
                     await window.electronAPI.invoke('update-item-album', { itemIds, albumId: targetAlbumId });
                     showToast(`${itemIds.length}개의 항목을 '${album.name}' 앨범으로 이동했습니다.`, 'success');
                 }
-                
                 await handleAlbumSelect(selectedAlbumId);
-                
             } else if (draggedAlbumId) {
-                let newParentId = null;
+                const updates = [];
+                const draggedAlbum = currentAlbums.find(a => a.id === draggedAlbumId);
+                const targetAlbum = currentAlbums.find(a => a.id === album.id);
+
                 if (dragState.mode === 'on') {
-                    newParentId = album.id;
+                    draggedAlbum.parent_id = targetAlbum.id;
+                    const siblings = currentAlbums.filter(a => a.parent_id === targetAlbum.id);
+                    siblings.forEach((a, i) => updates.push({ id: a.id, parent_id: a.parent_id, display_order: i * 10 }));
                 } else if (dragState.mode === 'above' || dragState.mode === 'below') {
-                    const targetAlbum = currentAlbums.find(a => a.id === album.id);
-                    newParentId = targetAlbum ? targetAlbum.parent_id : null;
-                } else {
-                     return;
+                    draggedAlbum.parent_id = targetAlbum.parent_id;
+                    let siblings = currentAlbums.filter(a => a.parent_id === targetAlbum.parent_id && a.id !== draggedAlbumId);
+                    const targetIndex = siblings.findIndex(a => a.id === targetAlbum.id);
+                    const insertIndex = dragState.mode === 'above' ? targetIndex : targetIndex + 1;
+                    siblings.splice(insertIndex, 0, draggedAlbum);
+                    siblings.forEach((a, i) => updates.push({ id: a.id, parent_id: a.parent_id, display_order: i * 10 }));
                 }
-    
-                currentAlbums = await window.electronAPI.invoke('update-album-parent', { id: draggedAlbumId, parentId: newParentId });
-                renderAlbums();
+                
+                if (updates.length > 0) {
+                    currentAlbums = await window.electronAPI.invoke('update-album-order-and-parent', updates);
+                    renderAlbums();
+                }
             }
-    
             albumList.querySelectorAll('.drop-on, .drop-above, .drop-below').forEach(el => el.classList.remove('drop-on', 'drop-above', 'drop-below'));
             dragState = {};
         });
@@ -222,12 +215,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const parentLi = e.target.closest('li.has-children');
             const albumId = parseInt(parentLi.dataset.id, 10);
             parentLi.classList.toggle('collapsed');
-            
-            if (parentLi.classList.contains('collapsed')) {
-                expandedAlbumIds.delete(albumId);
-            } else {
-                expandedAlbumIds.add(albumId);
-            }
+            if (parentLi.classList.contains('collapsed')) expandedAlbumIds.delete(albumId);
+            else expandedAlbumIds.add(albumId);
         });
     
         const nameSpan = document.createElement('span');
@@ -286,11 +275,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const renderItems = (items) => {
         promptList.innerHTML = '';
-        items.forEach(item => {
-            const itemElement = createNewPromptRow(item);
-            itemElement.classList.add('fade-in');
-            promptList.appendChild(itemElement);
-        });
+        items.forEach(item => promptList.appendChild(createNewPromptRow(item)));
         updateSelectionVisuals();
         applyShowHiddenState();
     };
@@ -304,9 +289,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const handle = document.createElement('div');
         handle.className = 'drag-handle';
         handle.draggable = true;
-        handle.addEventListener('dragstart', (e) => { e.stopPropagation(); if (!selectedItemIds.has(item.id)) { selectedItemIds.clear(); selectedItemIds.add(item.id); updateSelectionVisuals(); } const itemIds = Array.from(selectedItemIds); e.dataTransfer.setData('text/plain', JSON.stringify(itemIds)); e.dataTransfer.effectAllowed = 'move'; });
-        handle.addEventListener('click', (e) => { e.stopPropagation(); const isCtrlPressed = e.ctrlKey || e.metaKey; if (isCtrlPressed) { selectedItemIds.has(item.id) ? selectedItemIds.delete(item.id) : selectedItemIds.add(item.id); } else { if (selectedItemIds.has(item.id) && selectedItemIds.size === 1) { selectedItemIds.clear(); } else { selectedItemIds.clear(); selectedItemIds.add(item.id); } } updateSelectionVisuals(); });
-        row.addEventListener('click', (e) => { if (e.target.closest('.drag-handle, button, [contenteditable="true"], .prompt-editor-popover')) { return; } selectedItemIds.clear(); selectedItemIds.add(item.id); updateSelectionVisuals(); });
+        handle.addEventListener('dragstart', (e) => { e.stopPropagation(); if (!selectedItemIds.has(item.id)) { selectedItemIds.clear(); selectedItemIds.add(item.id); updateSelectionVisuals(); } e.dataTransfer.setData('text/plain', JSON.stringify(Array.from(selectedItemIds))); e.dataTransfer.effectAllowed = 'move'; });
+        handle.addEventListener('click', (e) => { e.stopPropagation(); const isCtrlPressed = e.ctrlKey || e.metaKey; if (isCtrlPressed) { selectedItemIds.has(item.id) ? selectedItemIds.delete(item.id) : selectedItemIds.add(item.id); } else { if (selectedItemIds.has(item.id) && selectedItemIds.size === 1) selectedItemIds.clear(); else { selectedItemIds.clear(); selectedItemIds.add(item.id); } } updateSelectionVisuals(); });
+        row.addEventListener('click', (e) => { if (e.target.closest('.drag-handle, button, [contenteditable="true"], .prompt-editor-popover')) return; selectedItemIds.clear(); selectedItemIds.add(item.id); updateSelectionVisuals(); });
 
         const dropZone = document.createElement('div');
         dropZone.className = 'image-drop-zone';
@@ -397,9 +382,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     
     const closeActivePromptEditor = () => {
-        if (activePromptEditor) {
-            activePromptEditor.close();
-        }
+        if (activePromptEditor) activePromptEditor.close();
     };
 
     const openGridPromptEditor = (item, targetElement) => {
@@ -423,13 +406,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const popoverRect = popover.getBoundingClientRect();
         const popoverWidth = Math.max(rect.width, 250);
         let finalLeft = rect.left;
-        if (rect.left + popoverWidth > window.innerWidth) {
-            finalLeft = window.innerWidth - popoverWidth - 10;
-        }
+        if (rect.left + popoverWidth > window.innerWidth) finalLeft = window.innerWidth - popoverWidth - 10;
         let finalTop = rect.bottom + 5;
-        if (finalTop + popoverRect.height > window.innerHeight) {
-            finalTop = rect.top - popoverRect.height - 5;
-        }
+        if (finalTop + popoverRect.height > window.innerHeight) finalTop = rect.top - popoverRect.height - 5;
         popover.style.left = `${finalLeft}px`;
         popover.style.top = `${finalTop}px`;
         popover.style.width = `${popoverWidth}px`;
@@ -454,16 +433,9 @@ document.addEventListener('DOMContentLoaded', () => {
             close();
         };
         const handleKeyDown = (e) => {
-            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                e.preventDefault();
-                save();
-            }
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); }
         };
-        const handleOutsideClick = (e) => {
-            if (!popover.contains(e.target) && e.target !== targetElement) {
-                close();
-            }
-        };
+        const handleOutsideClick = (e) => { if (!popover.contains(e.target) && e.target !== targetElement) close(); };
         saveBtn.addEventListener('click', save);
         cancelBtn.addEventListener('click', close);
         textarea.addEventListener('keydown', handleKeyDown);
@@ -511,11 +483,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const handleAddAlbum = async () => { const name = await showAlbumPrompt(); if (name && name.trim()) { currentAlbums = await window.electronAPI.invoke('add-album', name.trim()); renderAlbums(); showToast(`'${name.trim()}' 앨범이 추가되었습니다.`, 'success'); } };
     
     const handleAlbumSelect = async (albumId) => {
-        if (selectedAlbumId === albumId) return;
+        if (selectedAlbumId === albumId && albumId !== 1) return;
         closeActivePromptEditor();
         selectedAlbumId = albumId;
         
-        // ★★★ 수정: Main 프로세스에 현재 선택된 앨범 ID 알리기
         window.electronAPI.send('album-selected', selectedAlbumId);
         
         let current = currentAlbums.find(a => a.id == albumId);
@@ -531,17 +502,19 @@ document.addEventListener('DOMContentLoaded', () => {
         applyFiltersAndSort();
     };
 
-    const handleAlbumDelete = async (albumId, albumName) => { if (confirm(`'${albumName}' 앨범을 정말 삭제하시겠습니까?\n앨범 안의 모든 항목은 '모든 항목'으로 이동되고, 하위 앨범은 최상위로 이동됩니다.`)) { expandedAlbumIds.delete(albumId); currentAlbums = await window.electronAPI.invoke('delete-album', albumId); showToast(`'${albumName}' 앨범을 삭제했습니다.`); if (selectedAlbumId == albumId) { await handleAlbumSelect(1); } else { renderAlbums(); } } };
+    const handleAlbumDelete = async (albumId, albumName) => { if (confirm(`'${albumName}' 앨범을 정말 삭제하시겠습니까?\n모든 하위 항목과 앨범이 정리됩니다.`)) { expandedAlbumIds.delete(albumId); currentAlbums = await window.electronAPI.invoke('delete-album', albumId); showToast(`'${albumName}' 앨범을 삭제했습니다.`); if (selectedAlbumId == albumId) { await handleAlbumSelect(1); } else { renderAlbums(); } } };
     
+    // ★★★ 수정: 아이템 생성 버그 수정
     const handleAddItem = async () => { 
         const newItem = await window.electronAPI.invoke('add-item', selectedAlbumId); 
         if (newItem) { 
-            await handleAlbumSelect(selectedAlbumId);
+            // 현재 뷰를 새로고침하여 새 아이템을 포함시킴
+            currentItems = await window.electronAPI.invoke('get-items-by-album', selectedAlbumId);
+            applyFiltersAndSort(); 
             setTimeout(() => { 
                 const newRow = promptList.querySelector(`.prompt-row[data-item-id="${newItem.id}"]`); 
                 if (newRow) { 
-                    const titleEl = newRow.querySelector('.title-input'); 
-                    if(titleEl) titleEl.focus(); 
+                    newRow.querySelector('.title-input')?.focus(); 
                 } 
             }, 100); 
         } 
@@ -562,33 +535,18 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupGlobalShortcuts() {
         document.addEventListener('keydown', (e) => {
             const isInputFocused = e.target.isContentEditable || /INPUT|TEXTAREA/.test(e.target.tagName);
-            
             if (isInputFocused && (e.target.id === 'modal-input' || e.target.parentElement.classList.contains('prompt-editor-popover'))) return;
-
             switch (e.key) {
                 case 'Escape':
-                    if (activePromptEditor) {
-                        closeActivePromptEditor();
-                    } else if (!modalContainer.classList.contains('hidden')) {
-                        modalCancelBtn.click();
-                    } else if (selectedItemIds.size > 0) {
-                        selectedItemIds.clear();
-                        updateSelectionVisuals();
-                    }
+                    if (activePromptEditor) closeActivePromptEditor();
+                    else if (!modalContainer.classList.contains('hidden')) modalCancelBtn.click();
+                    else if (selectedItemIds.size > 0) { selectedItemIds.clear(); updateSelectionVisuals(); }
                     break;
-                case 'Delete':
-                case 'Backspace':
-                    if (!isInputFocused) {
-                        e.preventDefault();
-                        handleDeleteSelectedItems();
-                    }
+                case 'Delete': case 'Backspace':
+                    if (!isInputFocused) { e.preventDefault(); handleDeleteSelectedItems(); }
                     break;
             }
-
-            if (e.key === 'f' && (e.ctrlKey || e.metaKey)) {
-                e.preventDefault();
-                searchInput.focus();
-            }
+            if (e.key === 'f' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); searchInput.focus(); }
         });
     }
 
@@ -597,7 +555,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const resizer = document.getElementById('resizer');
         if (!sidebar || !resizer) return;
         let isResizing = false;
-        resizer.addEventListener('mousedown', (e) => {
+        resizer.addEventListener('mousedown', () => {
             isResizing = true;
             document.body.style.userSelect = 'none';
             document.body.style.pointerEvents = 'none';
@@ -606,8 +564,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         function handleMouseMove(e) {
             if (!isResizing) return;
-            const newWidth = Math.max(180, Math.min(e.clientX, 500));
-            sidebar.style.width = `${newWidth}px`;
+            sidebar.style.width = `${Math.max(180, Math.min(e.clientX, 500))}px`;
         }
         function handleMouseUp() {
             isResizing = false;
@@ -622,8 +579,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const { albums, items } = await window.electronAPI.invoke('get-initial-data');
         currentAlbums = albums;
         currentItems = items;
-        
-        // ★★★ 추가: 앱 시작 시 기본 선택 앨범 ID를 Main에 알림
         window.electronAPI.send('album-selected', selectedAlbumId);
 
         renderAlbums();
@@ -662,10 +617,8 @@ document.addEventListener('DOMContentLoaded', () => {
             item.prompt = prompt;
             const row = promptList.querySelector(`.prompt-row[data-item-id="${id}"]`);
             if (!row) return;
-            const promptEl = row.querySelector('.prompt-detail-input');
-            if(promptEl) promptEl.textContent = prompt;
-            const previewEl = row.querySelector('.prompt-preview-text');
-            if(previewEl) previewEl.textContent = prompt;
+            row.querySelector('.prompt-detail-input').textContent = prompt;
+            row.querySelector('.prompt-preview-text').textContent = prompt;
         });
     }
 
