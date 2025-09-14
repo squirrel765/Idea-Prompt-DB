@@ -1,0 +1,44 @@
+# .gitignore
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Dependency directories
+# 이 폴더는 npm install 명령어로 언제든 재생성할 수 있으므로 절대 올리지 않습니다.
+node_modules/
+
+# Build output
+dist
+out
+build
+release
+
+# Operating System generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor directories and files
+.idea
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# User-specific files
+.env
+
+# 데이터베이스 파일 (로컬 개발용 테스트 파일이 루트에 생성될 경우를 대비)
+*.db
+*.db-journal

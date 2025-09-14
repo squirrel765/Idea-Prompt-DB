@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Idea Prompt DB</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 1. 왼쪽 앨범 사이드바 -->
+        <div id="sidebar">
+            <h2 class="sidebar-title">앨범</h2>
+            <ul id="album-list">
+                <!-- 앨범 목록이 여기에 동적으로 추가됩니다 -->
+            </ul>
+            <button id="add-album-btn" class="add-album-button">+ 새 앨범 추가</button>
+        </div>
+
+        <!-- ★★★ 추가: 사이드바 너비 조절 핸들 ★★★ -->
+        <div id="resizer"></div>
+
+        <!-- 2. 오른쪽 메인 콘텐츠 -->
+        <div id="main-content">
+            <div class="app-header">
+                <div class="search-bar">
+                    <input type="text" id="search-input" placeholder="검색어를 입력하세요... (Ctrl+F)">
+                </div>
+                <select id="sort-options" class="sort-select">
+                    <option value="newest">최신순</option>
+                    <option value="oldest">오래된순</option>
+                    <option value="az">가나다순</option>
+                </select>
+                <div class="toggle-switch-container">
+                    <label for="auto-add-toggle">자동 추가</label>
+                    <input type="checkbox" id="auto-add-toggle" class="toggle-switch">
+                </div>
+                <div class="toggle-switch-container">
+                    <label for="show-hidden-toggle">숨김 표시</label>
+                    <input type="checkbox" id="show-hidden-toggle" class="toggle-switch">
+                </div>
+                <button id="toggle-view-btn" class="view-toggle-button">Grid View</button>
+            </div>
+
+            <div id="prompt-list" class="prompt-list list-view"></div>
+            
+            <div class="add-row-button-container">
+                <button id="add-prompt-btn" class="add-btn">+</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 이미지 크게 보기 라이트박스 -->
+    <div id="lightbox" class="lightbox-container">
+        <span id="lightbox-close" class="lightbox-close-btn">&times;</span>
+        <img id="lightbox-image" class="lightbox-image-content">
+    </div>
+
+    <!-- 새 앨범 추가 모달 -->
+    <div id="modal-container" class="modal-container hidden">
+        <div class="modal-content">
+            <h3 class="modal-title">새 앨범 이름</h3>
+            <input type="text" id="modal-input" placeholder="앨범 이름을 입력하세요...">
+            <div class="modal-buttons">
+                <button id="modal-cancel-btn" class="modal-btn">취소</button>
+                <button id="modal-confirm-btn" class="modal-btn primary">확인</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 토스트 알림 컨테이너 -->
+    <div id="toast-container"></div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>
