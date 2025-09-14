@@ -42,8 +42,8 @@ Stable Diffusion 등 다양한 AI 아트 툴을 사용하는 **아티스트와 �
 
 ## 🚀 설치 및 실행
 
-1. [릴리스 탭](./releases)에서 최신 `exe` 파일 다운로드  
-2. 실행 후 바로 사용 가능  
+1. [릴리스 탭](https://github.com/squirrel765/Idea-Prompt-DB/releases)에서 최신 `exe` 파일 다운로드
+2. 실행 후 바로 사용 가능
 
 ---
 
