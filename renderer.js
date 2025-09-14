@@ -1,4 +1,4 @@
-// renderer.js (전체 코드)
+// renderer.js (전체 최종 코드 - 자동 추가 기능 수정됨)
 
 document.addEventListener('DOMContentLoaded', () => {
     // --- Element 선택 ---
@@ -25,15 +25,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentItems = [];
     let selectedAlbumId = 1; // '모든 항목'이 기본값
     let selectedItemIds = new Set();
-    let activePromptEditor = null; // 현재 열려있는 팝오버 에디터 참조
+    let activePromptEditor = null;
+    let dragState = {};
+    let expandedAlbumIds = new Set();
 
     // --- 함수 정의 ---
 
-    /**
-     * 화면 우측 하단에 잠시 나타나는 알림 메시지(토스트)를 표시합니다.
-     * @param {string} message - 표시할 메시지
-     * @param {string} [type='info'] - 메시지 타입 ('info', 'success', 'error')
-     */
     const showToast = (message, type = 'info') => {
         if (!toastContainer) return;
         const toast = document.createElement('div');
@@ -49,19 +46,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 10);
     };
 
-    /**
-     * 붙여넣기 시 서식을 제거하고 일반 텍스트만 삽입하는 함수
-     * @param {ClipboardEvent} event - paste 이벤트 객체
-     */
     const handlePasteAsPlainText = (event) => {
         event.preventDefault();
         const text = event.clipboardData.getData('text/plain');
         document.execCommand('insertText', false, text);
     };
 
-    /**
-     * 다중 선택(2개 이상)일 때만 아이템에 .selected 클래스를 적용/제거합니다.
-     */
     const updateSelectionVisuals = () => {
         const isMultiSelect = selectedItemIds.size > 1;
         document.querySelectorAll('.prompt-row').forEach(row => {
@@ -70,95 +60,230 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
-    /**
-     * 앨범 목록을 렌더링하고 이벤트(클릭, 더블클릭, 드래그-드롭)를 설정합니다.
-     */
-    const renderAlbums = () => {
-        albumList.innerHTML = '';
-        const favoriteAlbum = { id: 'favorites', name: '⭐ 즐겨찾기' };
-        const allAlbums = [favoriteAlbum, ...currentAlbums];
-
-        allAlbums.forEach(album => {
-            const li = document.createElement('li');
-            li.textContent = album.name;
-            li.dataset.id = album.id;
-            if (album.id == selectedAlbumId) li.classList.add('active');
-
-            li.addEventListener('click', () => handleAlbumSelect(album.id));
-
-            if (album.id !== 1 && album.id !== 'favorites') {
-                li.addEventListener('dblclick', () => {
-                    li.classList.add('editing');
-                    const oldName = album.name;
-                    const input = document.createElement('input');
-                    input.type = 'text';
-                    input.value = oldName;
-                    li.innerHTML = '';
-                    li.appendChild(input);
-                    input.focus();
-
-                    const saveChanges = async () => {
-                        const newName = input.value.trim();
-                        if (newName && newName !== oldName) {
-                            currentAlbums = await window.electronAPI.invoke('update-album-name', { id: album.id, name: newName });
-                            showToast(`앨범 이름이 변경되었습니다.`, 'success');
-                        }
-                        renderAlbums();
-                    };
-
-                    input.addEventListener('blur', saveChanges);
-                    input.addEventListener('keydown', (e) => {
-                        if (e.key === 'Enter') input.blur();
-                        if (e.key === 'Escape') { 
-                            input.value = oldName;
-                            input.blur();
-                        }
-                    });
-                });
+    const buildAlbumTree = (albums) => {
+        const albumMap = new Map();
+        albums.filter(a => a.id !== 1).forEach(album => {
+            albumMap.set(album.id, { ...album, children: [] });
+        });
+        const tree = [];
+        for (const album of albumMap.values()) {
+            if (album.parent_id && albumMap.has(album.parent_id)) {
+                albumMap.get(album.parent_id).children.push(album);
+            } else {
+                tree.push(album);
             }
+        }
+        return tree;
+    };
 
-            li.addEventListener('dragover', (e) => { e.preventDefault(); li.classList.add('album-dragover'); });
-            li.addEventListener('dragleave', () => li.classList.remove('album-dragover'));
-            li.addEventListener('drop', async (e) => {
-                e.preventDefault();
-                li.classList.remove('album-dragover');
-                const itemIds = JSON.parse(e.dataTransfer.getData('text/plain'));
-                const targetAlbumId = album.id;
+    const renderAlbums = () => {
+        const albumTree = buildAlbumTree(currentAlbums);
+        albumList.innerHTML = '';
+        const allItemsAlbum = { id: 1, name: '모든 항목' };
+        const favoritesAlbum = { id: 'favorites', name: '⭐ 즐겨찾기' };
+
+        [allItemsAlbum, favoritesAlbum].forEach(album => {
+            albumList.appendChild(createAlbumListItem(album));
+        });
+
+        const renderNode = (albumNode, parentElement) => {
+            const li = createAlbumListItem(albumNode);
+            if (albumNode.children.length > 0) {
+                li.classList.add('has-children');
+                if (!expandedAlbumIds.has(albumNode.id)) {
+                    li.classList.add('collapsed');
+                }
                 
+                const childUl = document.createElement('ul');
+                albumNode.children.sort((a,b) => a.name.localeCompare(b.name)).forEach(child => renderNode(child, childUl));
+                li.appendChild(childUl);
+            }
+            parentElement.appendChild(li);
+        };
+        albumTree.sort((a,b) => a.name.localeCompare(b.name)).forEach(albumNode => renderNode(albumNode, albumList));
+    };
+    
+    const createAlbumListItem = (album) => {
+        const li = document.createElement('li');
+        li.dataset.id = album.id;
+        
+        const content = document.createElement('div');
+        content.className = 'album-content';
+    
+        if (album.id == selectedAlbumId) {
+            li.classList.add('active');
+        }
+    
+        content.addEventListener('click', (e) => {
+            if (!e.target.classList.contains('toggle-children') && !e.target.matches('.album-name input')) {
+                handleAlbumSelect(album.id);
+            }
+        });
+    
+        const isStandardAlbum = album.id !== 1 && album.id !== 'favorites';
+    
+        if (isStandardAlbum) {
+            content.draggable = true;
+            content.addEventListener('dragstart', (e) => {
+                e.stopPropagation();
+                e.dataTransfer.setData('application/json-album-id', album.id);
+                e.dataTransfer.effectAllowed = 'move';
+                dragState.draggedId = album.id;
+            });
+        }
+        
+        content.addEventListener('dragenter', (e) => e.preventDefault());
+    
+        content.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            const isItemDrag = e.dataTransfer.types.includes('text/plain');
+            
+            if (dragState.draggedId && (album.id == dragState.draggedId || li.querySelector(`li[data-id="${dragState.draggedId}"]`))) {
+                return;
+            }
+    
+            albumList.querySelectorAll('.drop-on, .drop-above, .drop-below').forEach(el => el.classList.remove('drop-on', 'drop-above', 'drop-below'));
+
+            const rect = content.getBoundingClientRect();
+            const verticalPos = (e.clientY - rect.top) / rect.height;
+    
+            dragState.targetLi = li;
+            if (dragState.draggedId && isStandardAlbum) {
+                 if (verticalPos > 0.25 && verticalPos < 0.75) {
+                    dragState.mode = 'on';
+                } else if (verticalPos <= 0.25) {
+                    dragState.mode = 'above';
+                } else {
+                    dragState.mode = 'below';
+                }
+            } else if (isItemDrag) {
+                dragState.mode = 'on';
+            }
+            
+            if (dragState.targetLi && dragState.mode) {
+                dragState.targetLi.classList.add(`drop-${dragState.mode}`);
+            }
+        });
+    
+        content.addEventListener('dragend', () => {
+            dragState = {};
+            albumList.querySelectorAll('.drop-on, .drop-above, .drop-below').forEach(el => el.classList.remove('drop-on', 'drop-above', 'drop-below'));
+        });
+        albumList.addEventListener('dragleave', () => {
+            albumList.querySelectorAll('.drop-on, .drop-above, .drop-below').forEach(el => el.classList.remove('drop-on', 'drop-above', 'drop-below'));
+        });
+
+        content.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+    
+            const draggedAlbumId = parseInt(e.dataTransfer.getData('application/json-album-id'), 10);
+            const draggedItemIdsStr = e.dataTransfer.getData('text/plain');
+            
+            if (draggedItemIdsStr) {
+                const itemIds = JSON.parse(draggedItemIdsStr);
+                const targetAlbumId = album.id;
+                if(targetAlbumId === 1) return;
+
                 if (targetAlbumId === 'favorites') {
-                    for (const id of itemIds) {
-                        await window.electronAPI.invoke('update-item-favorite-state', { id, isFavorite: true });
-                        const item = currentItems.find(i => i.id === id);
-                        if(item) item.isFavorite = 1;
-                    }
+                    for (const id of itemIds) await window.electronAPI.invoke('update-item-favorite-state', { id, isFavorite: true });
                     showToast(`${itemIds.length}개의 항목을 즐겨찾기에 추가했습니다.`, 'success');
                 } else {
                     await window.electronAPI.invoke('update-item-album', { itemIds, albumId: targetAlbumId });
                     showToast(`${itemIds.length}개의 항목을 '${album.name}' 앨범으로 이동했습니다.`, 'success');
                 }
                 
-                if (selectedAlbumId != 1) {
-                    currentItems = currentItems.filter(item => !itemIds.includes(item.id));
+                await handleAlbumSelect(selectedAlbumId);
+                
+            } else if (draggedAlbumId) {
+                let newParentId = null;
+                if (dragState.mode === 'on') {
+                    newParentId = album.id;
+                } else if (dragState.mode === 'above' || dragState.mode === 'below') {
+                    const targetAlbum = currentAlbums.find(a => a.id === album.id);
+                    newParentId = targetAlbum ? targetAlbum.parent_id : null;
+                } else {
+                     return;
                 }
-                applyFiltersAndSort();
-                selectedItemIds.clear();
-                updateSelectionVisuals();
-            });
-
-            if (album.id !== 1 && album.id !== 'favorites') {
-                const deleteBtn = document.createElement('button');
-                deleteBtn.className = 'delete-album-btn';
-                deleteBtn.textContent = '×';
-                deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); handleAlbumDelete(album.id, album.name); });
-                li.appendChild(deleteBtn);
-            }
-            albumList.appendChild(li);
-        });
-    };
     
-    /**
-     * 아이템 목록을 화면에 렌더링합니다.
-     */
+                currentAlbums = await window.electronAPI.invoke('update-album-parent', { id: draggedAlbumId, parentId: newParentId });
+                renderAlbums();
+            }
+    
+            albumList.querySelectorAll('.drop-on, .drop-above, .drop-below').forEach(el => el.classList.remove('drop-on', 'drop-above', 'drop-below'));
+            dragState = {};
+        });
+    
+        const toggleBtn = document.createElement('span');
+        toggleBtn.className = 'toggle-children';
+        toggleBtn.textContent = '▼';
+        toggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const parentLi = e.target.closest('li.has-children');
+            const albumId = parseInt(parentLi.dataset.id, 10);
+            parentLi.classList.toggle('collapsed');
+            
+            if (parentLi.classList.contains('collapsed')) {
+                expandedAlbumIds.delete(albumId);
+            } else {
+                expandedAlbumIds.add(albumId);
+            }
+        });
+    
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'album-name';
+        nameSpan.textContent = album.name;
+    
+        content.appendChild(toggleBtn);
+        content.appendChild(nameSpan);
+    
+        if (isStandardAlbum) {
+            content.addEventListener('dblclick', (e) => {
+                if(e.target.matches('input')) return;
+                const existingInput = document.querySelector('.album-name input');
+                if (existingInput) existingInput.blur();
+                
+                content.classList.add('editing');
+                const oldName = album.name;
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.value = oldName;
+                nameSpan.textContent = '';
+                nameSpan.appendChild(input);
+                input.focus();
+                input.select();
+    
+                const saveChanges = async () => {
+                    const newName = input.value.trim();
+                    if (newName && newName !== oldName) {
+                        showToast(`앨범 이름이 변경되었습니다.`, 'success');
+                        const albumInState = currentAlbums.find(a => a.id === album.id);
+                        if (albumInState) albumInState.name = newName;
+                        await window.electronAPI.invoke('update-album-name', { id: album.id, name: newName });
+                    }
+                    renderAlbums();
+                };
+    
+                const handleKeydown = (e) => {
+                    if (e.key === 'Enter') input.blur();
+                    if (e.key === 'Escape') { input.value = oldName; input.blur(); }
+                }
+    
+                input.addEventListener('blur', saveChanges, { once: true });
+                input.addEventListener('keydown', handleKeydown);
+            });
+    
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'delete-album-btn';
+            deleteBtn.textContent = '×';
+            deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); handleAlbumDelete(album.id, album.name); });
+            content.appendChild(deleteBtn);
+        }
+    
+        li.appendChild(content);
+        return li;
+    };
+
     const renderItems = (items) => {
         promptList.innerHTML = '';
         items.forEach(item => {
@@ -170,9 +295,6 @@ document.addEventListener('DOMContentLoaded', () => {
         applyShowHiddenState();
     };
 
-    /**
-     * 하나의 프롬프트 아이템 DOM 요소를 생성하고 모든 이벤트를 설정합니다.
-     */
     const createNewPromptRow = (item) => {
         const row = document.createElement('div');
         row.className = 'prompt-row';
@@ -184,7 +306,7 @@ document.addEventListener('DOMContentLoaded', () => {
         handle.draggable = true;
         handle.addEventListener('dragstart', (e) => { e.stopPropagation(); if (!selectedItemIds.has(item.id)) { selectedItemIds.clear(); selectedItemIds.add(item.id); updateSelectionVisuals(); } const itemIds = Array.from(selectedItemIds); e.dataTransfer.setData('text/plain', JSON.stringify(itemIds)); e.dataTransfer.effectAllowed = 'move'; });
         handle.addEventListener('click', (e) => { e.stopPropagation(); const isCtrlPressed = e.ctrlKey || e.metaKey; if (isCtrlPressed) { selectedItemIds.has(item.id) ? selectedItemIds.delete(item.id) : selectedItemIds.add(item.id); } else { if (selectedItemIds.has(item.id) && selectedItemIds.size === 1) { selectedItemIds.clear(); } else { selectedItemIds.clear(); selectedItemIds.add(item.id); } } updateSelectionVisuals(); });
-        row.addEventListener('click', (e) => { if (e.target.closest('.drag-handle, button, [contenteditable="true"]')) { return; } selectedItemIds.clear(); selectedItemIds.add(item.id); updateSelectionVisuals(); });
+        row.addEventListener('click', (e) => { if (e.target.closest('.drag-handle, button, [contenteditable="true"], .prompt-editor-popover')) { return; } selectedItemIds.clear(); selectedItemIds.add(item.id); updateSelectionVisuals(); });
 
         const dropZone = document.createElement('div');
         dropZone.className = 'image-drop-zone';
@@ -214,11 +336,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const previewText = document.createElement('span');
         previewText.className = 'prompt-preview-text';
         
-        previewText.title = '클릭하여 프롬프트 수정'; // 마우스 호버 시 툴팁 추가
+        previewText.title = '클릭하여 프롬프트 수정';
         previewText.addEventListener('click', (e) => {
-            // 그리드 뷰 상태일 때만 에디터 팝업을 엽니다.
             if (promptList.classList.contains('grid-view')) {
-                e.stopPropagation(); // 이벤트 버블링을 중단하여 아이템 선택을 방지합니다.
+                e.stopPropagation();
                 openGridPromptEditor(item, previewText);
             }
         });
@@ -274,114 +395,79 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.addEventListener('click', (e) => { e.stopPropagation(); navigator.clipboard.writeText(targetElement.textContent).then(() => { btn.textContent = '✅'; showToast('프롬프트가 클립보드에 복사되었습니다.'); setTimeout(() => { btn.textContent = '📋'; }, 1000); }); });
         return btn;
     };
-
-    /**
-     * 열려있는 팝오버 에디터가 있다면 닫습니다.
-     */
+    
     const closeActivePromptEditor = () => {
         if (activePromptEditor) {
             activePromptEditor.close();
         }
     };
 
-    /**
-     * 그리드 뷰에서 프롬프트를 수정하기 위한 작은 팝오버 창을 엽니다.
-     * @param {object} item - 수정할 아이템 객체
-     * @param {HTMLElement} targetElement - 팝오버가 표시될 기준 요소 (prompt-preview-text)
-     */
     const openGridPromptEditor = (item, targetElement) => {
-        closeActivePromptEditor(); // 기존 에디터가 있으면 닫기
-
+        closeActivePromptEditor();
         const popover = document.createElement('div');
         popover.className = 'prompt-editor-popover';
-        
         const textarea = document.createElement('textarea');
         textarea.value = item.prompt || '';
-        
         const buttonContainer = document.createElement('div');
         buttonContainer.className = 'popover-buttons';
-        
         const saveBtn = document.createElement('button');
         saveBtn.textContent = '저장';
         saveBtn.className = 'popover-btn primary';
-        
         const cancelBtn = document.createElement('button');
         cancelBtn.textContent = '취소';
         cancelBtn.className = 'popover-btn';
-
         buttonContainer.append(cancelBtn, saveBtn);
         popover.append(textarea, buttonContainer);
         document.body.appendChild(popover);
-
-        // --- ★★★ 수정된 위치 계산 로직 ★★★ ---
         const rect = targetElement.getBoundingClientRect();
-        const popoverRect = popover.getBoundingClientRect(); // 팝오버의 크기를 가져옴
+        const popoverRect = popover.getBoundingClientRect();
         const popoverWidth = Math.max(rect.width, 250);
-
-        // 1. 수평 위치 계산
         let finalLeft = rect.left;
         if (rect.left + popoverWidth > window.innerWidth) {
             finalLeft = window.innerWidth - popoverWidth - 10;
         }
-
-        // 2. 수직 위치 계산
-        let finalTop = rect.bottom + 5; // 기본적으로 요소 아래에 표시
-        // 팝오버가 화면 하단을 넘어가는지 확인
+        let finalTop = rect.bottom + 5;
         if (finalTop + popoverRect.height > window.innerHeight) {
-            // 넘어간다면 요소의 위쪽에 표시
             finalTop = rect.top - popoverRect.height - 5;
         }
-        
         popover.style.left = `${finalLeft}px`;
         popover.style.top = `${finalTop}px`;
         popover.style.width = `${popoverWidth}px`;
-        // --- ★★★ 여기까지 수정 ★★★
-
         textarea.focus();
         textarea.select();
-
-        // --- 이벤트 핸들러 ---
         const close = () => {
             popover.remove();
             document.removeEventListener('click', handleOutsideClick, true);
             activePromptEditor = null;
         };
-
         const save = async () => {
             const newPrompt = textarea.value.trim();
             if (newPrompt !== (item.prompt || '').trim()) {
                 const currentItem = currentItems.find(i => i.id === item.id);
                 if (currentItem) {
                     currentItem.prompt = newPrompt;
-                    targetElement.textContent = newPrompt; // UI 즉시 업데이트
+                    targetElement.textContent = newPrompt;
                     await window.electronAPI.invoke('update-item-text', { id: item.id, title: currentItem.title, prompt: newPrompt });
                     showToast('프롬프트를 수정했습니다.');
                 }
             }
             close();
         };
-        
         const handleKeyDown = (e) => {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                 e.preventDefault();
                 save();
             }
         };
-
         const handleOutsideClick = (e) => {
             if (!popover.contains(e.target) && e.target !== targetElement) {
                 close();
             }
         };
-
         saveBtn.addEventListener('click', save);
         cancelBtn.addEventListener('click', close);
         textarea.addEventListener('keydown', handleKeyDown);
-        
-        setTimeout(() => {
-            document.addEventListener('click', handleOutsideClick, true);
-        }, 0);
-        
+        setTimeout(() => { document.addEventListener('click', handleOutsideClick, true); }, 0);
         activePromptEditor = { close };
     };
 
@@ -394,7 +480,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const openLightbox = (imageUrl) => { lightboxImage.src = imageUrl; lightbox.style.display = 'flex'; };
     const applyShowHiddenState = () => { promptList.classList.toggle('hiding-enabled', !showHiddenToggle.checked); };
     const applyFiltersAndSort = () => {
-        closeActivePromptEditor(); // 필터링/정렬 시 에디터 닫기
+        closeActivePromptEditor();
         let itemsToRender = [...currentItems];
         const searchTerm = searchInput.value.toLowerCase().trim();
         if (searchTerm) {
@@ -425,26 +511,41 @@ document.addEventListener('DOMContentLoaded', () => {
     const handleAddAlbum = async () => { const name = await showAlbumPrompt(); if (name && name.trim()) { currentAlbums = await window.electronAPI.invoke('add-album', name.trim()); renderAlbums(); showToast(`'${name.trim()}' 앨범이 추가되었습니다.`, 'success'); } };
     
     const handleAlbumSelect = async (albumId) => {
-        // 이미 선택된 앨범을 다시 클릭하면 아무것도 하지 않음
         if (selectedAlbumId === albumId) return;
-
-        closeActivePromptEditor(); // 앨범 변경 시 에디터 닫기
-
+        closeActivePromptEditor();
         selectedAlbumId = albumId;
+        
+        // ★★★ 수정: Main 프로세스에 현재 선택된 앨범 ID 알리기
+        window.electronAPI.send('album-selected', selectedAlbumId);
+        
+        let current = currentAlbums.find(a => a.id == albumId);
+        while (current && current.parent_id) {
+            expandedAlbumIds.add(current.parent_id);
+            current = currentAlbums.find(a => a.id === current.parent_id);
+        }
+
         selectedItemIds.clear();
         currentItems = await window.electronAPI.invoke('get-items-by-album', albumId);
-
-        // 앨범 목록 전체를 다시 그리는 대신, active 클래스만 교체하여 효율성 증대 및 버그 해결
-        albumList.querySelectorAll('li').forEach(li => {
-            // dataset.id는 문자열, albumId는 숫자일 수 있으므로 == 비교 사용
-            li.classList.toggle('active', li.dataset.id == albumId);
-        });
-
+        
+        renderAlbums();
         applyFiltersAndSort();
     };
 
-    const handleAlbumDelete = async (albumId, albumName) => { if (confirm(`'${albumName}' 앨범을 정말 삭제하시겠습니까?\n앨범 안의 항목들은 '모든 항목'으로 이동됩니다.`)) { currentAlbums = await window.electronAPI.invoke('delete-album', albumId); showToast(`'${albumName}' 앨범을 삭제했습니다.`); if (selectedAlbumId == albumId) { await handleAlbumSelect(1); } else { renderAlbums(); } } };
-    const handleAddItem = async () => { const newItem = await window.electronAPI.invoke('add-item', selectedAlbumId); if (newItem) { currentItems.unshift(newItem); applyFiltersAndSort(); setTimeout(() => { const newRow = promptList.querySelector(`.prompt-row[data-item-id="${newItem.id}"]`); if (newRow) { const titleEl = newRow.querySelector('.title-input'); if(titleEl) titleEl.focus(); } }, 100); } };
+    const handleAlbumDelete = async (albumId, albumName) => { if (confirm(`'${albumName}' 앨범을 정말 삭제하시겠습니까?\n앨범 안의 모든 항목은 '모든 항목'으로 이동되고, 하위 앨범은 최상위로 이동됩니다.`)) { expandedAlbumIds.delete(albumId); currentAlbums = await window.electronAPI.invoke('delete-album', albumId); showToast(`'${albumName}' 앨범을 삭제했습니다.`); if (selectedAlbumId == albumId) { await handleAlbumSelect(1); } else { renderAlbums(); } } };
+    
+    const handleAddItem = async () => { 
+        const newItem = await window.electronAPI.invoke('add-item', selectedAlbumId); 
+        if (newItem) { 
+            await handleAlbumSelect(selectedAlbumId);
+            setTimeout(() => { 
+                const newRow = promptList.querySelector(`.prompt-row[data-item-id="${newItem.id}"]`); 
+                if (newRow) { 
+                    const titleEl = newRow.querySelector('.title-input'); 
+                    if(titleEl) titleEl.focus(); 
+                } 
+            }, 100); 
+        } 
+    };
     
     async function handleDeleteSelectedItems() {
         if (selectedItemIds.size === 0) return;
@@ -462,11 +563,10 @@ document.addEventListener('DOMContentLoaded', () => {
         document.addEventListener('keydown', (e) => {
             const isInputFocused = e.target.isContentEditable || /INPUT|TEXTAREA/.test(e.target.tagName);
             
-            if (isInputFocused && e.target.id === 'modal-input') return;
+            if (isInputFocused && (e.target.id === 'modal-input' || e.target.parentElement.classList.contains('prompt-editor-popover'))) return;
 
             switch (e.key) {
                 case 'Escape':
-                    // 팝오버 에디터를 우선적으로 닫도록 순서 변경
                     if (activePromptEditor) {
                         closeActivePromptEditor();
                     } else if (!modalContainer.classList.contains('hidden')) {
@@ -496,9 +596,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const sidebar = document.getElementById('sidebar');
         const resizer = document.getElementById('resizer');
         if (!sidebar || !resizer) return;
-
         let isResizing = false;
-
         resizer.addEventListener('mousedown', (e) => {
             isResizing = true;
             document.body.style.userSelect = 'none';
@@ -506,13 +604,11 @@ document.addEventListener('DOMContentLoaded', () => {
             document.addEventListener('mousemove', handleMouseMove);
             document.addEventListener('mouseup', handleMouseUp);
         });
-
         function handleMouseMove(e) {
             if (!isResizing) return;
             const newWidth = Math.max(180, Math.min(e.clientX, 500));
             sidebar.style.width = `${newWidth}px`;
         }
-
         function handleMouseUp() {
             isResizing = false;
             document.removeEventListener('mousemove', handleMouseMove);
@@ -527,6 +623,9 @@ document.addEventListener('DOMContentLoaded', () => {
         currentAlbums = albums;
         currentItems = items;
         
+        // ★★★ 추가: 앱 시작 시 기본 선택 앨범 ID를 Main에 알림
+        window.electronAPI.send('album-selected', selectedAlbumId);
+
         renderAlbums();
         applyFiltersAndSort();
         
@@ -548,17 +647,15 @@ document.addEventListener('DOMContentLoaded', () => {
             window.electronAPI.send('auto-add-toggle-changed', autoAddToggle.checked);
         });
 
-        window.electronAPI.on('item-auto-added', (newItem) => {
-            const shouldDisplay = selectedAlbumId == 1 || 
-                                  (newItem.album_id === null && selectedAlbumId == 1) || 
-                                  selectedAlbumId == newItem.album_id || 
-                                  (selectedAlbumId === 'favorites' && newItem.isFavorite);
-            if (shouldDisplay) {
-                currentItems.unshift(newItem);
-                applyFiltersAndSort();
-                showToast('클립보드에서 새 항목을 추가했습니다.', 'success');
-            }
+        window.electronAPI.on('item-auto-added', async (newItem) => {
+            showToast('클립보드에서 새 항목을 추가했습니다.', 'success');
+            const currentlySelected = selectedAlbumId;
+            currentAlbums = await window.electronAPI.invoke('get-albums');
+            currentItems = await window.electronAPI.invoke('get-items-by-album', currentlySelected);
+            renderAlbums();
+            applyFiltersAndSort();
         });
+        
         window.electronAPI.on('item-prompt-updated', ({ id, prompt }) => {
             const item = currentItems.find(i => i.id === id);
             if (!item) return;

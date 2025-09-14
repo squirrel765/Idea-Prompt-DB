@@ -1,22 +1,21 @@
+/* style.css (전체 최종 코드) */
+
 /* 전체적인 앱 스타일링 */
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #282c34; color: #f1f1f1; margin: 0; height: 100vh; overflow: hidden; }
 input[type="text"], [contenteditable="true"] { user-select: auto; }
 .app-container { display: flex; height: 100%; }
 #sidebar { width: 220px; background-color: #21252b; padding: 20px; display: flex; flex-direction: column; flex-shrink: 0; }
-/* ★★★ 추가: 리사이저 스타일 ★★★ */
 #resizer { width: 4px; background-color: #181a1f; cursor: col-resize; flex-shrink: 0; }
 #resizer:hover { background-color: #61afef; }
 #main-content { flex-grow: 1; display: flex; flex-direction: column; padding: 20px; overflow: hidden; }
 #prompt-list { flex-grow: 1; overflow-y: auto; padding-right: 10px; }
 .sidebar-title { margin-top: 0; }
+
+/* 앨범 목록 스타일 */
 #album-list { list-style: none; padding: 0; margin: 0; flex-grow: 1; overflow-y: auto; }
-#album-list li { padding: 12px 15px; border-radius: 6px; cursor: pointer; transition: background-color 0.2s, border-color 0.2s; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; border: 1px solid transparent; user-select: none; }
-#album-list li:hover { background-color: #2c313a; }
-#album-list li.active { background-color: #61afef; color: white; }
-#album-list li.album-dragover { background-color: #98c379; border-color: #f1f1f1; border-style: dashed; }
 .add-album-button { width: 100%; padding: 12px; border: 1px dashed #444; border-radius: 6px; background: none; color: #9da5b4; cursor: pointer; margin-top: 15px; }
 .add-album-button:hover { background-color: #2c313a; border-style: solid; }
-.delete-album-btn { background: none; border: none; color: inherit; opacity: 0.5; cursor: pointer; }
+.delete-album-btn { background: none; border: none; color: inherit; opacity: 0.5; cursor: pointer; padding: 0 5px; }
 .delete-album-btn:hover { opacity: 1; color: #e06c75; }
 
 /* 오른쪽 메인 콘텐츠 상단 헤더 */
@@ -36,14 +35,11 @@ input[type="text"], [contenteditable="true"] { user-select: auto; }
 /* 프롬프트 아이템 공통 스타일 */
 .prompt-row { background-color: #32363e; border-radius: 8px; overflow: hidden; border: 2px solid transparent; transition: opacity 0.3s, border-color 0.2s, background-color 0.2s; position: relative; cursor: default; user-select: none; display: flex; }
 .prompt-row.selected { border-color: #61afef; background-color: #3a3f4b; }
-/* ★★★ 추가: 아이템 추가 시 페이드인 애니메이션 ★★★ */
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 .prompt-row.fade-in { animation: fadeIn 0.4s ease-out; }
-
 .drag-handle { width: 14px; flex-shrink: 0; background-color: #282c34; cursor: grab; transition: background-color 0.2s; }
 .drag-handle:hover { background-color: #4c515c; }
 .drag-handle:active { cursor: grabbing; }
-
 .image-drop-zone { background-color: #3c4049; background-size: contain; background-repeat: no-repeat; background-position: center; transition: background-color 0.2s; display: flex; align-items: center; justify-content: center; color: #9da5b4; font-size: 14px; cursor: pointer; }
 .image-drop-zone.dragover { background-color: #4c515c; border: 2px dashed #61afef; }
 
@@ -68,7 +64,7 @@ input[type="text"], [contenteditable="true"] { user-select: auto; }
 .grid-view .title-input-wrapper { padding: 10px; text-align: center; }
 .grid-view .title-input { font-size: 14px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .grid-view .preview-section { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background-color: #2c313a; border-top: 1px solid #444; }
-.prompt-preview-text { font-size: 12px; color: #9da5b4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1; padding-right: 10px; }
+.prompt-preview-text { font-size: 12px; color: #9da5b4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1; padding-right: 10px; cursor: pointer; }
 
 /* 아이템 추가 버튼 */
 .add-row-button-container { background-color: #32363e; border-radius: 8px; border: 1px solid #444; height: 50px; flex-shrink: 0; }
@@ -114,118 +110,120 @@ input[type="text"], [contenteditable="true"] { user-select: auto; }
 .modal-btn:hover { background-color: #4c515c; }
 .modal-btn.primary:hover { background-color: #529bde; }
 
-/* ★★★ 추가: 토스트 알림 스타일 ★★★ */
+/* 토스트 알림 스타일 */
 #toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 3000; display: flex; flex-direction: column; gap: 10px; }
 .toast-message { background-color: #3c4049; color: #f1f1f1; padding: 12px 20px; border-radius: 6px; border-left: 4px solid #61afef; box-shadow: 0 4px 12px rgba(0,0,0,0.3); opacity: 0; transform: translateX(100%); transition: opacity 0.3s ease, transform 0.3s ease; }
 .toast-message.success { border-left-color: #98c379; }
 .toast-message.error { border-left-color: #e06c75; }
 .toast-message.show { opacity: 1; transform: translateX(0); }
 
-/* ★★★ 추가: 앨범 이름 인플레이스 편집 스타일 ★★★ */
-#album-list li.editing { padding: 8px 10px; }
-#album-list li input { width: 100%; box-sizing: border-box; background-color: #4c515c; border: 1px solid #61afef; color: white; padding: 4px 8px; border-radius: 4px; outline: none; }
+/* 그리드 뷰 프롬프트 팝오버 에디터 스타일 */
+.prompt-editor-popover { position: absolute; z-index: 100; background-color: #21252b; border: 1px solid #61afef; border-radius: 6px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); padding: 10px; display: flex; flex-direction: column; gap: 8px; width: 250px; }
+.prompt-editor-popover textarea { width: 100%; height: 120px; background-color: #3c4049; color: #f1f1f1; border: 1px solid #444; border-radius: 4px; resize: vertical; outline: none; font-family: inherit; font-size: 13px; padding: 8px; box-sizing: border-box; }
+.prompt-editor-popover .popover-buttons { display: flex; justify-content: flex-end; gap: 8px; }
+.prompt-editor-popover .popover-btn { padding: 5px 12px; border-radius: 4px; border: 1px solid #444; background-color: #3c4049; color: #f1f1f1; font-size: 12px; cursor: pointer; }
+.prompt-editor-popover .popover-btn.primary { background-color: #61afef; border-color: #61afef; color: white; }
+.prompt-editor-popover .popover-btn:hover { background-color: #4c515c; }
+.prompt-editor-popover .popover-btn.primary:hover { background-color: #529bde; }
 
-/* --- 프롬프트 잘림 및 스크롤바 문제 최종 완성 코드 --- */
-
-/* 1. 프롬프트 섹션의 Flexbox 구조를 안정적으로 유지합니다. */
-.list-view .prompt-section {
+/* --- ★★★ 앨범 계층 구조 스타일 (최종 수정) ★★★ --- */
+#album-list ul {
+    list-style: none;
+    padding-left: 20px;
+}
+#album-list li {
+    padding: 0;
+    margin: 0;
     display: flex;
     flex-direction: column;
-    min-height: 0;
-}
-
-/* 2. 프롬프트 입력창 래퍼가 공간을 올바르게 차지하도록 합니다. */
-.list-view .prompt-detail-input-wrapper {
-    flex-grow: 1;
-    display: flex;
-    min-height: 0;
-}
-
-/* 3. 실제 프롬프트 입력창의 박스 모델과 스크롤 동작을 완성합니다. */
-.list-view .prompt-detail-input {
-    flex: 1;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    word-break: break-all;
-    min-height: 40px;
-
-    /* ★★★ 핵심 수정: 패딩을 높이 계산에 포함시켜 마지막 줄이 잘리는 문제를 해결합니다. ★★★ */
-    box-sizing: border-box;
-}
-
-/* 4. (개선) 앱 테마와 어울리도록 전역 스크롤바 스타일을 지정합니다. */
-::-webkit-scrollbar {
-    width: 8px; /* 스크롤바 너비 */
-}
-
-::-webkit-scrollbar-track {
-    background: #282c34; /* 스크롤바 배경색 (메인 배경과 동일하게) */
-    border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb {
-    background: #5c6370; /* 스크롤바 막대 색상 */
-    border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: #61afef; /* 마우스 호버 시 하이라이트 색상 */
-}
-
-/* 추가: 그리드 뷰 프롬프트 팝오버 에디터 스타일 */
-.prompt-editor-popover {
-    position: absolute;
-    z-index: 100;
-    background-color: #21252b;
-    border: 1px solid #61afef;
-    border-radius: 6px;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    width: 250px; /* 기본 너비 */
-}
-
-.prompt-editor-popover textarea {
-    width: 100%;
-    height: 120px;
-    background-color: #3c4049;
-    color: #f1f1f1;
-    border: 1px solid #444;
-    border-radius: 4px;
-    resize: vertical;
-    outline: none;
-    font-family: inherit;
-    font-size: 13px;
-    padding: 8px;
-    box-sizing: border-box;
-}
-
-.prompt-editor-popover .popover-buttons {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-}
-
-.prompt-editor-popover .popover-btn {
-    padding: 5px 12px;
-    border-radius: 4px;
-    border: 1px solid #444;
-    background-color: #3c4049;
-    color: #f1f1f1;
-    font-size: 12px;
+    justify-content: space-between;
+    align-items: flex-start;
+    user-select: none;
     cursor: pointer;
+    position: relative;
 }
-
-.prompt-editor-popover .popover-btn.primary {
+.album-content {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 12px 15px;
+    border-radius: 6px;
+    border-top: 2px solid transparent;
+    border-bottom: 2px solid transparent;
+    transition: background-color 0.1s;
+    box-sizing: border-box;
+}
+#album-list li > .album-content:hover {
+    background-color: #2c313a;
+}
+#album-list li.active > .album-content {
     background-color: #61afef;
-    border-color: #61afef;
     color: white;
 }
-.prompt-editor-popover .popover-btn:hover {
-    background-color: #4c515c;
+#album-list li.drop-on > .album-content {
+    background-color: rgba(152, 195, 121, 0.5); /* #98c379 with transparency */
 }
-.prompt-editor-popover .popover-btn.primary:hover {
-    background-color: #529bde;
+#album-list li.drop-above .album-content {
+    border-top: 2px solid #61afef;
+}
+#album-list li.drop-below .album-content {
+    border-bottom: 2px solid #61afef;
+}
+.toggle-children {
+    display: none;
+    width: 16px;
+    height: 16px;
+    margin-right: 5px;
+    cursor: pointer;
+    text-align: center;
+    line-height: 16px;
+    font-size: 10px;
+    flex-shrink: 0;
+}
+#album-list li.has-children > .album-content .toggle-children {
+    display: inline-block;
+    transition: transform 0.2s ease;
+}
+#album-list li.collapsed > .album-content .toggle-children {
+    transform: rotate(-90deg);
+}
+#album-list li.collapsed > ul {
+    display: none;
+}
+.album-name {
+    flex-grow: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.album-name input {
+    width: 100%;
+    box-sizing: border-box;
+    background-color: #4c515c;
+    border: 1px solid #61afef;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    outline: none;
+}
+
+/* --- 프롬프트 잘림 및 스크롤바 문제 최종 완성 코드 --- */
+.list-view .prompt-section { display: flex; flex-direction: column; min-height: 0; }
+.list-view .prompt-detail-input-wrapper { flex-grow: 1; display: flex; min-height: 0; }
+.list-view .prompt-detail-input { flex: 1; overflow-y: auto; white-space: pre-wrap; word-break: break-all; min-height: 40px; box-sizing: border-box; }
+
+/* 앱 테마와 어울리도록 전역 스크롤바 스타일을 지정 */
+::-webkit-scrollbar {
+    width: 8px;
+}
+::-webkit-scrollbar-track {
+    background: #282c34;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb {
+    background: #5c6370;
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #61afef;
 }
