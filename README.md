@@ -9,27 +9,9 @@ Stable Diffusion 등 다양한 AI 아트 툴을 사용하는 **아티스트와 �
 
 ## 🎥 데모 영상
 
-<figure>
-  <video width="600" controls>
-    <source src="vid/기본 사용.mp4" type="video/mp4">
-  </video>
-  <figcaption>📌 기본 사용 방법</figcaption>
-</figure>
-
-<figure>
-  <video width="600" controls>
-    <source src="vid/앨범이동.mp4" type="video/mp4">
-  </video>
-  <figcaption>📌 앨범 이동 기능</figcaption>
-</figure>
-
-<figure>
-  <video width="600" controls>
-    <source src="vid/자동추가기능.mp4" type="video/mp4">
-  </video>
-  <figcaption>📌 자동 추가 기능</figcaption>
-</figure>
-
+- [📌 기본 사용 방법 (영상 보기)](vid/기본%20사용.mp4)
+- [📌 앨범 이동 기능 (영상 보기)](vid/앨범이동.mp4)
+- [📌 자동 추가 기능 (영상 보기)](vid/자동추가기능.mp4)
 ---
 
 ## ✨ 주요 기능
